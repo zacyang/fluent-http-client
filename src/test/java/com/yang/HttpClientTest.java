@@ -12,7 +12,7 @@ import static org.mockito.MockitoAnnotations.initMocks;
 
 import java.util.List;
 
-import com.yang.httpClient.GenericHttpClient;
+import com.yang.httpClient.HttpClient;
 import com.yang.httpClient.factory.HttpEntityFactory;
 import com.yang.httpClient.handler.ExceptionHandler;
 import com.yang.httpClient.handler.ExceptionResponseHandler;
@@ -31,7 +31,7 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.client.UnknownHttpStatusCodeException;
 
-public class GenericHttpClientTest {
+public class HttpClientTest {
 
     @Mock
     private SuccessResponseHandler successfulHandler;
@@ -50,11 +50,13 @@ public class GenericHttpClientTest {
     @Mock
     private ResponseEntity<String> response;
 
+    private HttpClient testSubject;
     private String url = "http://localhost/api";
 
     @Before
     public void setUp() throws Exception {
         initMocks(this);
+        testSubject = new HttpClient();
     }
 
     @Test
@@ -62,7 +64,7 @@ public class GenericHttpClientTest {
         initHttpMethodSetUp(HttpMethod.GET, HttpStatus.OK);
 
         when(successfulHandler.handle(anyString())).thenReturn("OK");
-        String result = GenericHttpClient.newRequest(HttpMethod.GET, url).
+        String result = testSubject.newRequest(HttpMethod.GET, url).
                 withRestTemplate(restTemplate).
                 onSuccess(successfulHandler).collectResponse();
 
@@ -74,7 +76,7 @@ public class GenericHttpClientTest {
     public void shouldSendInitialHttpMethodPost() throws Exception {
         initHttpMethodSetUp(HttpMethod.POST, HttpStatus.OK);
 
-        String result = GenericHttpClient.newRequest(HttpMethod.POST, url).
+        String result = testSubject.newRequest(HttpMethod.POST, url).
                 withHeader(HttpHeaders.ACCEPT, "application/txt").
                 withBody("123").
                 withRestTemplate(restTemplate).
@@ -90,7 +92,7 @@ public class GenericHttpClientTest {
         initHttpMethodSetUp(HttpMethod.PUT, HttpStatus.OK);
 
         when(successfulHandler.handle("OK")).thenReturn("OK");
-        String result = GenericHttpClient.newRequest(HttpMethod.PUT, url).
+        String result = testSubject.newRequest(HttpMethod.PUT, url).
                 withHeader(HttpHeaders.ACCEPT, "application/txt").
                 withBody("123").
                 withRestTemplate(restTemplate).
@@ -109,7 +111,7 @@ public class GenericHttpClientTest {
         ResourceAccessException resourceAccessException = new ResourceAccessException("not able to access resource");
         when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), argument.capture(), any(ParameterizedTypeReference.class))).thenThrow(resourceAccessException);
 
-        GenericHttpClient.newRequest(HttpMethod.GET, url).
+        testSubject.newRequest(HttpMethod.GET, url).
                 withHeader(HttpHeaders.ACCEPT, "application/txt").
                 withRestTemplate(restTemplate).
                 onException(ResourceAccessException.class, exceptionHandler).
@@ -130,7 +132,7 @@ public class GenericHttpClientTest {
         when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), argument.capture(), any(ParameterizedTypeReference.class))).thenThrow(actualException);
 
         Class<UnknownHttpStatusCodeException> registeredExceptionHandlerType = UnknownHttpStatusCodeException.class;
-        String result = GenericHttpClient.newRequest(HttpMethod.GET, url).
+        String result = testSubject.newRequest(HttpMethod.GET, url).
                 withHeader(HttpHeaders.ACCEPT, "application/txt").
                 withRestTemplate(restTemplate).
                 onException(registeredExceptionHandlerType, exceptionHandler).
@@ -157,7 +159,7 @@ public class GenericHttpClientTest {
         generatedHeaders.set(HttpHeaders.ACCEPT, "application/question");
         when(httpEntityFactory.headers()).thenReturn(generatedHeaders);
 
-        String result = GenericHttpClient.newRequest(get, url).
+        String result = testSubject.newRequest(get, url).
                 withHeader(HttpHeaders.ACCEPT, "application/txt").
                 withBody("123").
                 withRestTemplate(restTemplate).

@@ -20,7 +20,7 @@ import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
-public class GenericHttpClient {
+public class HttpClient {
     private String requestUrl;
     private RestTemplate restTemplate;
     private HttpMethod initMethod;
@@ -31,43 +31,45 @@ public class GenericHttpClient {
     private HttpEntityFactory httpEntityFactory;
     private SuccessResponseHandler<Object> successResponseHandler;
 
+    public HttpClient() {
+    }
 
-    private GenericHttpClient(RestTemplate restTemplate, HttpMethod httpMethod, String requestUrl) {
+    private HttpClient(RestTemplate restTemplate, HttpMethod httpMethod, String requestUrl) {
         this.successResponseHandler = DEFAULT_200_OK_HANDLER;
         this.initMethod = httpMethod;
         this.requestUrl = requestUrl;
     }
 
-    public static GenericHttpClient newRequest(HttpMethod httpMethod, String url) {
-        return new GenericHttpClient(new RestTemplate(), httpMethod, url);
+    public HttpClient newRequest(HttpMethod httpMethod, String url) {
+        return new HttpClient(new RestTemplate(), httpMethod, url);
     }
 
-    public GenericHttpClient withRestTemplate(RestTemplate restTemplate) {
+    public HttpClient withRestTemplate(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
         return this;
     }
 
-    public GenericHttpClient withHeader(String accept, String applicationVndAconexGroupV1Json) {
+    public HttpClient withHeader(String accept, String applicationVndAconexGroupV1Json) {
         headers.set(accept, applicationVndAconexGroupV1Json);
         return this;
     }
 
-    public GenericHttpClient onRespond(HttpStatus httpStatus, ExceptionResponseHandler handler) {
+    public HttpClient onRespond(HttpStatus httpStatus, ExceptionResponseHandler handler) {
         handlers.put(httpStatus, handler);
         return this;
     }
 
-    public GenericHttpClient onException(Class<? extends Exception> exceptionType, ExceptionHandler handler) {
+    public HttpClient onException(Class<? extends Exception> exceptionType, ExceptionHandler handler) {
         exceptionHandlers.put(exceptionType, handler);
         return this;
     }
 
-    public GenericHttpClient onSuccess(SuccessResponseHandler handler) {
+    public HttpClient onSuccess(SuccessResponseHandler handler) {
         this.successResponseHandler = handler;
         return this;
     }
 
-    public <T> T collectResponse() throws Exception {
+    public <T> T collectResponse() {
         validate();
         this.restTemplate = this.restTemplate == null ? new RestTemplate() : restTemplate;
         try {
@@ -87,7 +89,7 @@ public class GenericHttpClient {
         return null;
     }
 
-    private void handleException(RestClientException e) throws Exception {
+    private void handleException(RestClientException e) {
         if (e instanceof HttpStatusCodeException) {
             ExceptionResponseHandler exceptionResponseHandler = handlers.get(((HttpStatusCodeException) e).getStatusCode());
             if (exceptionResponseHandler != null) {
@@ -108,12 +110,12 @@ public class GenericHttpClient {
         }
     }
 
-    public GenericHttpClient withBody(Object obj) {
+    public HttpClient withBody(Object obj) {
         this.requestBody = obj;
         return this;
     }
 
-    public GenericHttpClient withEntityFactory(final HttpEntityFactory httpEntityFactory) {
+    public HttpClient withEntityFactory(final HttpEntityFactory httpEntityFactory) {
         this.httpEntityFactory = httpEntityFactory;
         return this;
     }
