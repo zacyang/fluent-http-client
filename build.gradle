@@ -1,20 +1,18 @@
-group 'com.yang.httphandler'
-version '1.0-SNAPSHOT'
 
 apply plugin: 'java'
 
-sourceCompatibility = 1.5
+sourceCompatibility = JavaVersion.VERSION_1_8
+targetCompatibility = JavaVersion.VERSION_1_8
+
+group = 'com.yang.httClient'
+version = '1.0-SNAPSHOT'
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-//    // http://mvnrepository.com/artifact/commons-httpclient/commons-httpclient
-//    compile group: 'commons-httpclient', name: 'commons-httpclient', version: '3.1'
-    // http://mvnrepository.com/artifact/com.google.guava/guava
     compile group: 'com.google.guava', name: 'guava', version: '19.0'
-    // http://mvnrepository.com/artifact/org.mockito/mockito-all
     compile group: 'org.mockito', name: 'mockito-all', version: '1.9.5'
     compile "org.springframework:spring-web:4.2.6.RELEASE"
 
