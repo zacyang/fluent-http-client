@@ -1,270 +1,170 @@
 package com.yang;
 
-import static com.yang.GenericHttpClient.newRequest;
-import static org.apache.commons.httpclient.HttpStatus.SC_NOT_FOUND;
-import static org.apache.commons.httpclient.HttpStatus.SC_OK;
+import static org.mockito.Matchers.any;
+import static org.mockito.Matchers.anyString;
+import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 import static org.mockito.MockitoAnnotations.initMocks;
 
-import java.io.IOException;
-import java.security.InvalidParameterException;
 import java.sql.SQLException;
 
-import com.google.common.net.HttpHeaders;
-import org.apache.commons.httpclient.HttpClient;
-import org.apache.commons.httpclient.HttpStatus;
-import org.apache.commons.httpclient.methods.GetMethod;
-import org.apache.commons.httpclient.methods.PostMethod;
-import org.apache.commons.httpclient.methods.PutMethod;
-import org.apache.commons.httpclient.methods.StringRequestEntity;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestTemplate;
+import org.springframework.web.client.UnknownHttpStatusCodeException;
 
 public class GenericHttpClientTest {
 
     @Mock
-    private HttpClient httpClient;
+    private ResponseHandler successfulHandler;
     @Mock
-    private PostMethod post;
-    @Mock
-    private GetMethod get;
-    @Mock
-    private PutMethod put;
-    @Mock
-    private ResponseHandler SUCCESSFUL_HANDLER;
-    @Mock
-    private ResponseHandler GENERAL_ERROR_HANDLER;
+    private ResponseHandler responseHandler;
     @Mock
     private ExceptionHandler PARAMETER_GENERAL_ERROR_HANDLER;
     @Mock
-    private ResponseHandler SPECIFIC_ERROR_HANDLER;
-    @Mock
-    private StringRequestEntity stringEntity;
+    private ResponseHandler specificRespCodeHandler;
     @Mock
     private ExceptionHandler exceptionHandler;
     @Mock
     private ExceptionHandler unexpectedExceptionHandler;
+    @Mock
+    private RestTemplate restTemplate;
+    @Mock
+    private ResponseEntity<String> response;
 
+    private String url = "http://localhost/api";
 
     @Before
     public void setUp() throws Exception {
         initMocks(this);
+    }
 
+    @Test
+    public void shouldSendInitHttpRequestGet() throws Exception {
+        initHttpMethodSetUp(HttpMethod.GET, HttpStatus.OK);
+
+        GenericHttpClient.newRequest(HttpMethod.GET, url).
+                withRestTemplate(restTemplate).
+                onSuccess(successfulHandler).execute(String.class);
+
+        verify(successfulHandler).handle();
     }
 
     @Test
     public void shouldSendInitialHttpMethodPost() throws Exception {
-        when(httpClient.executeMethod(post)).thenReturn(HttpStatus.SC_OK);
+        initHttpMethodSetUp(HttpMethod.POST, HttpStatus.OK);
 
-        newRequest(post)
-                .withHttpClient(httpClient)
-                .execute(10);
+        GenericHttpClient.newRequest(HttpMethod.POST, url).
+                withHeader(HttpHeaders.ACCEPT, "application/txt").
+                withBody("123").
+                withRestTemplate(restTemplate).
+                onSuccess(successfulHandler).execute(String.class);
 
-        verify(httpClient).executeMethod(post);
+        verify(successfulHandler).handle();
+
     }
 
-    @Test
-    public void shouldSendInitialHttpMethodGet() throws Exception {
-        when(httpClient.executeMethod(get)).thenReturn(HttpStatus.SC_OK);
-
-        newRequest(get)
-                .withHttpClient(httpClient)
-                .execute(10);
-
-        verify(httpClient).executeMethod(get);
-    }
 
     @Test
     public void shouldSendInitialHttpMethodPut() throws Exception {
-        when(httpClient.executeMethod(put)).thenReturn(HttpStatus.SC_OK);
+        initHttpMethodSetUp(HttpMethod.PUT, HttpStatus.OK);
 
-        newRequest(put)
-                .withHttpClient(httpClient)
-                .execute(10);
+        GenericHttpClient.newRequest(HttpMethod.PUT, url).
+                withHeader(HttpHeaders.ACCEPT, "application/txt").
+                withBody("123").
+                withRestTemplate(restTemplate).
+                onSuccess(successfulHandler).execute(String.class);
 
-        verify(httpClient).executeMethod(put);
-
-    }
-
-    @Test
-    public void shouldCallSuccessHandlerWhenSuccuessed() throws Exception {
-        when(httpClient.executeMethod(get)).thenReturn(HttpStatus.SC_OK);
-
-        newRequest(get)
-                .withHttpClient(httpClient)
-                .onSuccess(SUCCESSFUL_HANDLER)
-                .execute(10);
-
-        verify(SUCCESSFUL_HANDLER).handle();
-        verify(httpClient).executeMethod(get);
-
+        verify(successfulHandler).handle();
     }
 
     @Test
     public void shouldCallGeneralErrorHandlerWhenAnyError() throws Exception {
-        when(httpClient.executeMethod(get)).thenReturn(SC_NOT_FOUND);
 
-        newRequest(get)
-                .withHttpClient(httpClient)
-                .onSuccess(SUCCESSFUL_HANDLER)
-                .onAnyError(GENERAL_ERROR_HANDLER)
-                .execute(10);
+        initHttpMethodSetUp(HttpMethod.GET, HttpStatus.NOT_FOUND);
 
-        verify(GENERAL_ERROR_HANDLER).handle();
-        verifyNoMoreInteractions(SUCCESSFUL_HANDLER);
-        verify(httpClient).executeMethod(get);
-    }
+        GenericHttpClient.newRequest(HttpMethod.GET, url).
+                withHeader(HttpHeaders.ACCEPT, "application/txt").
+                withRestTemplate(restTemplate).
+                onException(SQLException.class, exceptionHandler).
+                onRespond(HttpStatus.NOT_FOUND, specificRespCodeHandler).
+                onSuccess(successfulHandler).execute(String.class);
 
-
-    @Test
-    public void shouldCallSpecificErrorHandlerWHenSpecificErrorHandlerRegistered() throws Exception {
-        when(httpClient.executeMethod(get)).thenReturn(SC_NOT_FOUND);
-
-        newRequest(get)
-                .withHttpClient(httpClient)
-                .onSuccess(SUCCESSFUL_HANDLER)
-                .onAnyError(GENERAL_ERROR_HANDLER)
-                .onRespond(SC_NOT_FOUND, SPECIFIC_ERROR_HANDLER)
-                .execute(10);
-
-        verify(SPECIFIC_ERROR_HANDLER).handle();
-        verifyNoMoreInteractions(SUCCESSFUL_HANDLER);
-        verifyNoMoreInteractions(GENERAL_ERROR_HANDLER);
-        verify(httpClient).executeMethod(get);
-
-    }
-
-    @Test(expected = InvalidParameterException.class)
-    public void shouldRaiseExceptionWhenTryCallExecuteWithoutAValidInitialRequest() throws Exception {
-
-        when(httpClient.executeMethod(get)).thenReturn(SC_NOT_FOUND);
-
-        newRequest(null)
-                .withHttpClient(httpClient)
-                .onSuccess(SUCCESSFUL_HANDLER)
-                .onAnyError(GENERAL_ERROR_HANDLER)
-                .onRespond(SC_NOT_FOUND, SPECIFIC_ERROR_HANDLER)
-                .execute(10);
-
-        verify(SPECIFIC_ERROR_HANDLER).handle();
-        verifyNoMoreInteractions(SUCCESSFUL_HANDLER);
-        verifyNoMoreInteractions(GENERAL_ERROR_HANDLER);
-        verify(httpClient).executeMethod(get);
-    }
-
-
-    @Test
-    public void shouldSetHeadersForOutGoingRequest() throws Exception {
-
-        when(httpClient.executeMethod(post)).thenReturn(SC_OK);
-
-        newRequest(post)
-                .withHttpClient(httpClient)
-                .withHeader(HttpHeaders.ACCEPT, "123")
-                .onSuccess(SUCCESSFUL_HANDLER)
-                .onAnyError(GENERAL_ERROR_HANDLER)
-                .onRespond(SC_NOT_FOUND, SPECIFIC_ERROR_HANDLER)
-                .execute(10);
-        verify(post).setRequestHeader(HttpHeaders.ACCEPT, "123");
-        verify(SUCCESSFUL_HANDLER).handle();
-        verifyNoMoreInteractions(GENERAL_ERROR_HANDLER);
-        verify(httpClient).executeMethod(post);
+        verifyNoMoreInteractions(successfulHandler);
+        verify(specificRespCodeHandler).handle();
     }
 
     @Test
-    public void shouldSetRequestEntityOnlyForPost() throws Exception {
+    public void shouldCallExceptionHandlerWhenExceptionHandlerRegistered() throws Exception {
+        ArgumentCaptor<HttpEntity> argument = ArgumentCaptor.forClass(HttpEntity.class);
+        when(response.getBody()).thenReturn("OK");
+        when(response.getStatusCode()).thenReturn(HttpStatus.NOT_FOUND);
+        ResourceAccessException resourceAccessException = new ResourceAccessException("not able to access resource");
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), argument.capture(), any(Class.class))).thenThrow(resourceAccessException);
 
-        when(httpClient.executeMethod(post)).thenReturn(SC_OK);
+        GenericHttpClient.newRequest(HttpMethod.GET, url).
+                withHeader(HttpHeaders.ACCEPT, "application/txt").
+                withRestTemplate(restTemplate).
+                onException(ResourceAccessException.class, exceptionHandler).
+                onRespond(HttpStatus.NOT_FOUND, specificRespCodeHandler).
+                onSuccess(successfulHandler).execute(String.class);
 
-        newRequest(post)
-                .withHttpClient(httpClient)
-                .withRequestEntity(stringEntity)
-                .onSuccess(SUCCESSFUL_HANDLER)
-                .onAnyError(GENERAL_ERROR_HANDLER)
-                .onRespond(SC_NOT_FOUND, SPECIFIC_ERROR_HANDLER)
-                .execute(10);
-
-        verify(post).setRequestEntity(stringEntity);
-        verify(SUCCESSFUL_HANDLER).handle();
-        verifyNoMoreInteractions(GENERAL_ERROR_HANDLER);
-        verify(httpClient).executeMethod(post);
+        verifyNoMoreInteractions(successfulHandler);
+        verifyNoMoreInteractions(specificRespCodeHandler);
+        verify(exceptionHandler).handle(resourceAccessException);
     }
 
     @Test
-    public void shouldBeNotifyHandlerWhenExceptionRaised() throws Exception {
+    public void shouldAbleInitRequestWithSimpleInterface() throws Exception {
+        ArgumentCaptor<HttpEntity> argument = ArgumentCaptor.forClass(HttpEntity.class);
+        when(response.getBody()).thenReturn("OK");
+        when(response.getStatusCode()).thenReturn(HttpStatus.OK);
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), argument.capture(), any(Class.class))).thenReturn(response);
 
-        IOException ioException = new IOException();
-        when(httpClient.executeMethod(post)).thenThrow(ioException);
 
-        newRequest(post)
-                .withHttpClient(httpClient)
-                .onException(IOException.class, exceptionHandler)
-                .execute(10);
+        GenericHttpClient.newRequest(HttpMethod.GET, url).
+                withRestTemplate(restTemplate).
+                onSuccess(successfulHandler).execute(String.class);
 
-        verify(exceptionHandler).handle(ioException);
-        verifyNoMoreInteractions(SUCCESSFUL_HANDLER);
-        verifyNoMoreInteractions(GENERAL_ERROR_HANDLER);
-        verify(httpClient).executeMethod(post);
+        verify(successfulHandler).handle();
     }
 
     @Test
     public void shouldOnlyNotifyRegisteredHandlerForSpecificException() throws Exception {
+        ArgumentCaptor<HttpEntity> argument = ArgumentCaptor.forClass(HttpEntity.class);
+        when(response.getBody()).thenReturn("OK");
+        when(response.getStatusCode()).thenReturn(HttpStatus.NOT_FOUND);
+        ResourceAccessException actualException = new ResourceAccessException("not able to access resource");
+        when(restTemplate.exchange(anyString(), eq(HttpMethod.GET), argument.capture(), any(Class.class))).thenThrow(actualException);
 
-        IOException ioException = new IOException();
-        when(httpClient.executeMethod(post)).thenThrow(ioException);
+        Class<UnknownHttpStatusCodeException> registeredExceptionHandlerType = UnknownHttpStatusCodeException.class;
+        GenericHttpClient.newRequest(HttpMethod.GET, url).
+                withHeader(HttpHeaders.ACCEPT, "application/txt").
+                withRestTemplate(restTemplate).
+                onException(registeredExceptionHandlerType, exceptionHandler).
+                onRespond(HttpStatus.NOT_FOUND, specificRespCodeHandler).
+                onSuccess(successfulHandler).execute(String.class);
 
-        newRequest(post)
-                .withHttpClient(httpClient)
-                .onException(IOException.class, exceptionHandler)
-                .onException(SQLException.class, unexpectedExceptionHandler)
-                .execute(10);
+        verifyNoMoreInteractions(successfulHandler);
+        verifyNoMoreInteractions(specificRespCodeHandler);
+        verifyNoMoreInteractions(exceptionHandler);
 
-        verify(exceptionHandler).handle(ioException);
-        verifyNoMoreInteractions(SUCCESSFUL_HANDLER);
-        verifyNoMoreInteractions(GENERAL_ERROR_HANDLER);
-        verifyNoMoreInteractions(unexpectedExceptionHandler);
-        verify(httpClient).executeMethod(post);
     }
 
-
-    @Test(expected = InvalidParameterException.class)
-    public void shouldRaiseExceptionWhenTrySettingRequestEntityForGet() throws Exception {
-
-        when(httpClient.executeMethod(get)).thenReturn(SC_OK);
-
-        newRequest(get)
-                .withHttpClient(httpClient)
-                .withRequestEntity(stringEntity)
-                .onSuccess(SUCCESSFUL_HANDLER)
-                .onAnyError(GENERAL_ERROR_HANDLER)
-                .onRespond(SC_NOT_FOUND, SPECIFIC_ERROR_HANDLER)
-                .execute(10);
-
-        verify(SUCCESSFUL_HANDLER).handle();
-        verifyNoMoreInteractions(GENERAL_ERROR_HANDLER);
-        verify(httpClient).executeMethod(get);
+    private void initHttpMethodSetUp(HttpMethod get, HttpStatus httpStatus) {
+        ArgumentCaptor<HttpEntity> argument = ArgumentCaptor.forClass(HttpEntity.class);
+        when(response.getBody()).thenReturn("OK");
+        when(response.getStatusCode()).thenReturn(httpStatus);
+        when(restTemplate.exchange(anyString(), eq(get), argument.capture(), any(Class.class))).thenReturn(response);
     }
-
-    @Test
-    public void shouldReturnResposneEntityAfterSuccess() throws Exception {
-
-        when(httpClient.executeMethod(post)).thenReturn(SC_OK);
-
-        newRequest(post)
-                .withHttpClient(httpClient)
-                .withRequestEntity(stringEntity)
-                .onSuccess(SUCCESSFUL_HANDLER)
-                .onRespond(SC_NOT_FOUND, SPECIFIC_ERROR_HANDLER)
-                .execute(10);
-
-        verify(post).setRequestEntity(stringEntity);
-        verify(SUCCESSFUL_HANDLER).handle();
-        verifyNoMoreInteractions(GENERAL_ERROR_HANDLER);
-        verify(httpClient).executeMethod(post);
-    }
-
-
 }

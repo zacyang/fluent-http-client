@@ -10,13 +10,13 @@ repositories {
 }
 
 dependencies {
-    // http://mvnrepository.com/artifact/commons-httpclient/commons-httpclient
-    compile group: 'commons-httpclient', name: 'commons-httpclient', version: '3.1'
+//    // http://mvnrepository.com/artifact/commons-httpclient/commons-httpclient
+//    compile group: 'commons-httpclient', name: 'commons-httpclient', version: '3.1'
     // http://mvnrepository.com/artifact/com.google.guava/guava
     compile group: 'com.google.guava', name: 'guava', version: '19.0'
     // http://mvnrepository.com/artifact/org.mockito/mockito-all
     compile group: 'org.mockito', name: 'mockito-all', version: '1.9.5'
-
+    compile "org.springframework:spring-web:4.2.6.RELEASE"
 
     testCompile group: 'junit', name: 'junit', version: '4.11'
 }

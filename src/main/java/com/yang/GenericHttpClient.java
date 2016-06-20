@@ -1,85 +1,98 @@
 package com.yang;
 
 import static com.google.common.collect.Maps.newHashMap;
-import static com.yang.CommonHandlers.DEFAULT_200_OK_HANDLER;
-import static com.yang.CommonHandlers.KEY_GENERIC_ERROR_HANDLER;
-import static org.apache.commons.httpclient.HttpStatus.SC_OK;
 
 import java.security.InvalidParameterException;
 import java.util.Map;
 
-import org.apache.commons.httpclient.HttpClient;
-import org.apache.commons.httpclient.HttpMethod;
-import org.apache.commons.httpclient.MultiThreadedHttpConnectionManager;
-import org.apache.commons.httpclient.methods.PostMethod;
-import org.apache.commons.httpclient.methods.StringRequestEntity;
-import org.apache.commons.httpclient.params.HttpConnectionManagerParams;
-import org.apache.commons.httpclient.params.HttpConnectionParams;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestTemplate;
 
 public class GenericHttpClient {
-    private static final int TOTAL_CONNECTIONS = 60;
+    private static String url;
 
-    private HttpClient httpClient;
-    private HttpMethod initRequest;
-    private Map<Integer, ResponseHandler> handlers = newHashMap();
+    private RestTemplate restTemplate;
+    private HttpMethod initMethod;
+    private Map<HttpStatus, ResponseHandler> handlers = newHashMap();
     private Map<Class, ExceptionHandler> exceptionHandlers = newHashMap();
+    private HttpHeaders headers = new HttpHeaders();
+    private Object requestBody;
 
-    private GenericHttpClient(HttpMethod httpMethod) {
+    private GenericHttpClient(RestTemplate restTemplate, HttpMethod httpMethod, String url) {
         this.handlers.put(null, CommonHandlers.DEFAULT_200_OK_HANDLER);
-        this.initRequest = httpMethod;
+        this.initMethod = httpMethod;
+        this.url = url;
     }
 
-    public static GenericHttpClient newRequest(HttpMethod httpMethod) {
-        return new GenericHttpClient(httpMethod);
+    public static GenericHttpClient newRequest(HttpMethod httpMethod, String url) {
+        return new GenericHttpClient(new RestTemplate(), httpMethod, url);
+    }
+    public  GenericHttpClient withRestTemplate(RestTemplate restTemplate){
+        this.restTemplate = restTemplate;
+        return this;
     }
 
     public GenericHttpClient withHeader(String accept, String applicationVndAconexGroupV1Json) {
-        this.initRequest.setRequestHeader(accept, applicationVndAconexGroupV1Json);
+        headers.set(accept, applicationVndAconexGroupV1Json);
         return this;
     }
 
-    public GenericHttpClient onAnyError(ResponseHandler handler) {
-        handlers.put(null, handler);
-        return this;
-    }
-
-
-    public GenericHttpClient onRespond(int httpStatus, ResponseHandler handler) {
+    public GenericHttpClient onRespond(HttpStatus httpStatus, ResponseHandler handler) {
         handlers.put(httpStatus, handler);
         return this;
     }
 
-    public GenericHttpClient onException(Class<? extends Exception> exceptionTyep, ExceptionHandler handler) {
-        exceptionHandlers.put(exceptionTyep, handler);
+    public GenericHttpClient onException(Class<? extends Exception> exceptionType, ExceptionHandler handler) {
+        exceptionHandlers.put(exceptionType, handler);
         return this;
     }
 
     public GenericHttpClient onSuccess(ResponseHandler handler) {
-        handlers.put(SC_OK, handler);
+        handlers.put(HttpStatus.OK, handler);
         return this;
     }
 
-    public GenericHttpClient execute(int timeout) throws Exception {
+    public GenericHttpClient execute(Class responseClass) throws Exception {
         validate();
-        this.httpClient = createOrGetHttpClient(timeout);
+        this.restTemplate = this.restTemplate == null? new RestTemplate() : restTemplate;
         try {
-            int returnCode = this.httpClient.executeMethod(initRequest);
-            getResponseHandler(returnCode).handle();
-        } catch (Exception e) {
-            Class<? extends Exception> exceptionType = e.getClass();
-            ExceptionHandler exceptionHandler = exceptionHandlers.get(exceptionType);
-            exceptionHandler.handle(e);
+            HttpEntity<Object> httpEntity = new HttpEntity<Object>(requestBody, this.headers);
+            ResponseEntity result = this.restTemplate.exchange(url, initMethod, httpEntity, responseClass);
+            //get result here?
+            result.getBody();
+            getResponseHandler(result.getStatusCode()).handle();
+
+        } catch (RestClientException e) {
+
+            if (e instanceof HttpStatusCodeException) {
+                ResponseHandler responseHandler = handlers.get(((HttpStatusCodeException) e).getStatusCode());
+                if(responseHandler != null){
+                    responseHandler.handle();
+                }
+            } else {
+                Class<? extends Exception> exceptionType = e.getClass();
+                ExceptionHandler exceptionHandler = exceptionHandlers.get(exceptionType);
+                if(exceptionHandler != null){
+                    exceptionHandler.handle(e);
+                }
+            }
         }
         return this;
     }
 
     private void validate() throws InvalidParameterException {
-        if (initRequest == null) {
+        if (initMethod == null) {
             throw new InvalidParameterException();
         }
     }
 
-    private ResponseHandler getResponseHandler(int returnCode) {
+    private ResponseHandler getResponseHandler(HttpStatus returnCode) {
         ResponseHandler responseHandler = handlers.get(returnCode);
         if (null != responseHandler) {
             return responseHandler;
@@ -87,49 +100,16 @@ public class GenericHttpClient {
         return getDefaultHandlersByCode(returnCode);
     }
 
-    private ResponseHandler getDefaultHandlersByCode(int returnCode) {
-        if (returnCode == SC_OK) {
-            return DEFAULT_200_OK_HANDLER;
+    private ResponseHandler getDefaultHandlersByCode(HttpStatus returnCode) {
+        if (returnCode == HttpStatus.OK) {
+            return CommonHandlers.DEFAULT_200_OK_HANDLER;
         } else {
-            return handlers.get(KEY_GENERIC_ERROR_HANDLER);
+            return handlers.get(null);
         }
     }
 
-    public GenericHttpClient withRequestEntity(StringRequestEntity stringRequestEntity) {
-        if (initRequest instanceof PostMethod) {
-            PostMethod postMethod = (PostMethod) this.initRequest;
-            postMethod.setRequestEntity(stringRequestEntity);
-        } else {
-            throw new InvalidParameterException("RequestEntity only applicable for POST method");
-        }
+    public GenericHttpClient withBody(Object obj) {
+        this.requestBody = obj;
         return this;
     }
-
-    private HttpClient createOrGetHttpClient(int timeout) {
-        return this.httpClient == null ? createOrGetHttpClient(timeout, timeout, timeout) : httpClient;
-    }
-
-    private HttpClient createOrGetHttpClient(int connectionManagerTimeout, int connectionTimeout, int readTimeout) {
-        HttpClient httpClient = new HttpClient(createHttpConnectionManager());
-        httpClient.getParams().setConnectionManagerTimeout(connectionManagerTimeout);
-        httpClient.getParams().setSoTimeout(readTimeout);
-        httpClient.getParams().setIntParameter(HttpConnectionParams.CONNECTION_TIMEOUT, connectionTimeout);
-        return httpClient;
-    }
-
-    private MultiThreadedHttpConnectionManager createHttpConnectionManager() {
-        MultiThreadedHttpConnectionManager multiThreadedHttpConnectionManager = new MultiThreadedHttpConnectionManager();
-        HttpConnectionManagerParams params = new HttpConnectionManagerParams();
-        params.setMaxTotalConnections(TOTAL_CONNECTIONS);
-        params.setDefaultMaxConnectionsPerHost(TOTAL_CONNECTIONS);
-        multiThreadedHttpConnectionManager.setParams(params);
-        return multiThreadedHttpConnectionManager;
-    }
-
-
-    public GenericHttpClient withHttpClient(HttpClient httpClient) {
-        this.httpClient = httpClient;
-        return this;
-    }
-
 }
