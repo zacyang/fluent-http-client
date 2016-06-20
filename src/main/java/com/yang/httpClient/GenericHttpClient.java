@@ -41,7 +41,8 @@ public class GenericHttpClient {
     public static GenericHttpClient newRequest(HttpMethod httpMethod, String url) {
         return new GenericHttpClient(new RestTemplate(), httpMethod, url);
     }
-    public  GenericHttpClient withRestTemplate(RestTemplate restTemplate){
+
+    public GenericHttpClient withRestTemplate(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
         return this;
     }
@@ -68,14 +69,15 @@ public class GenericHttpClient {
 
     public <T> T collectResponse() throws Exception {
         validate();
-        this.restTemplate = this.restTemplate == null? new RestTemplate() : restTemplate;
+        this.restTemplate = this.restTemplate == null ? new RestTemplate() : restTemplate;
         try {
-            if(this.httpEntityFactory!=null){
+            if (this.httpEntityFactory != null) {
                 headers = httpEntityFactory.headers();
             }
             HttpEntity<Object> httpEntity = new HttpEntity<Object>(requestBody, this.headers);
 
-            ResponseEntity<T> result = this.restTemplate.exchange(requestUrl, initMethod, httpEntity, new ParameterizedTypeReference<T>(){});
+            ResponseEntity<T> result = this.restTemplate.exchange(requestUrl, initMethod, httpEntity, new ParameterizedTypeReference<T>() {
+            });
 
             return this.successResponseHandler.handle(result.getBody());
 
@@ -88,13 +90,13 @@ public class GenericHttpClient {
     private void handleException(RestClientException e) throws Exception {
         if (e instanceof HttpStatusCodeException) {
             ExceptionResponseHandler exceptionResponseHandler = handlers.get(((HttpStatusCodeException) e).getStatusCode());
-            if(exceptionResponseHandler != null){
+            if (exceptionResponseHandler != null) {
                 exceptionResponseHandler.handle(((HttpStatusCodeException) e).getResponseHeaders(), ((HttpStatusCodeException) e).getResponseBodyAsByteArray());
             }
         } else {
             Class<? extends Exception> exceptionType = e.getClass();
             ExceptionHandler exceptionHandler = exceptionHandlers.get(exceptionType);
-            if(exceptionHandler != null){
+            if (exceptionHandler != null) {
                 exceptionHandler.handle(e);
             }
         }
